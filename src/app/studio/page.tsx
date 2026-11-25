@@ -67,7 +67,7 @@ export default function StreamerStudioPage() {
   const isChannelOwner = Boolean(userId && channel?.owner_id === userId);
   const [allChannels, setAllChannels] = useState<Channel[]>([]);
   const isAdmin = profile?.role === "admin";
-  const [baseRtmpUrl, setBaseRtmpUrl] = useState("rtmp://YOUR_FUTURE_SERVER_IP/live");
+  const [baseRtmpUrl, setBaseRtmpUrl] = useState("rtmp://13.60.58.40/live");
 
   const [channelName, setChannelName] = useState("");
   const [category, setCategory] = useState("Entertainment");
