@@ -26,7 +26,7 @@ export default function StreamingAuthModal({
     setLoading(true);
 
     const origin =
-      typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || "https://livingtv.vercel.app");
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
