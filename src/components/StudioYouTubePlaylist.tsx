@@ -93,6 +93,19 @@ export default function StudioYouTubePlaylist({
     }
 
     setBusy(true);
+    const { data: chRow } = await supabase
+      .from("channels")
+      .select("playlist_started_at")
+      .eq("id", channelId)
+      .maybeSingle();
+
+    if (!chRow?.playlist_started_at) {
+      await supabase
+        .from("channels")
+        .update({ playlist_started_at: new Date().toISOString() })
+        .eq("id", channelId);
+    }
+
     const nextOrder = items.length > 0 ? Math.max(...items.map((i) => i.sort_order)) + 1 : 0;
     const { error } = await supabase.from("channel_playlist_items").insert({
       channel_id: channelId,

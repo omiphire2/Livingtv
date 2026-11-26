@@ -29,6 +29,7 @@ declare global {
       PlayerState?: {
         ENDED: number;
         PLAYING: number;
+        PAUSED: number;
       };
     };
     onYouTubeIframeAPIReady?: () => void;
@@ -39,6 +40,8 @@ interface YTPlayerInstance {
   loadVideoById?: (
     videoId: string | { videoId: string; startSeconds?: number }
   ) => void;
+  seekTo?: (seconds: number, allowSeekAhead: boolean) => void;
+  getCurrentTime?: () => number;
   playVideo?: () => void;
   mute?: () => void;
   unMute?: () => void;
@@ -143,6 +146,11 @@ export default function YouTubePlaylistPlayer({
     nextStartSecRef.current = slot.isLiveClock ? slot.startSec : 0;
     indexRef.current = safeIdx;
     setActiveIndex(safeIdx);
+
+    if (slot.isLiveClock && playerRef.current?.seekTo && safeIdx === indexRef.current) {
+      playerRef.current.seekTo(slot.startSec, true);
+      playerRef.current.playVideo?.();
+    }
   }, [items, playlistStartedAt]);
 
   const advanceToNext = () => {
@@ -205,6 +213,9 @@ export default function YouTubePlaylistPlayer({
         events: {
           onReady: (event) => {
             event.target.mute?.();
+            if (slot.isLiveClock && slot.startSec > 0) {
+              event.target.seekTo?.(slot.startSec, true);
+            }
             event.target.playVideo?.();
           },
           onStateChange: (event) => {
@@ -226,13 +237,42 @@ export default function YouTubePlaylistPlayer({
   useEffect(() => {
     const current = items[activeIndex];
     if (!current || !playerRef.current?.loadVideoById) return;
+    const seekSec = nextStartSecRef.current;
     playerRef.current.loadVideoById({
       videoId: current.youtube_id,
-      startSeconds: nextStartSecRef.current,
+      startSeconds: seekSec,
     });
+    if (seekSec > 0) {
+      playerRef.current.seekTo?.(seekSec, true);
+    }
     playerRef.current.playVideo?.();
     nextStartSecRef.current = 0;
   }, [activeIndex, items]);
+
+  // Enforce live broadcast position & prevent rewinding behind the channel clock
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const p = playerRef.current;
+      if (!p?.getCurrentTime || !p?.seekTo) return;
+      const slot = computeLiveSlot(itemsRef.current, startedAtRef.current);
+      if (!slot.isLiveClock) return;
+
+      if (slot.index !== indexRef.current) {
+        indexRef.current = slot.index;
+        nextStartSecRef.current = slot.startSec;
+        setActiveIndex(slot.index);
+        return;
+      }
+
+      const currentTime = p.getCurrentTime();
+      if (Math.abs(currentTime - slot.startSec) > 3) {
+        p.seekTo(slot.startSec, true);
+        p.playVideo?.();
+      }
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (items.length === 0) return null;
 
@@ -244,7 +284,7 @@ export default function YouTubePlaylistPlayer({
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-zinc-900/95 border-b border-zinc-800 text-xs">
         <div className="flex items-center gap-2 min-w-0">
           <span className="px-1.5 py-0.5 rounded bg-red-600/20 text-red-300 font-bold text-[10px] uppercase shrink-0 inline-flex items-center gap-1">
-            <Radio className="w-3 h-3" /> {liveClockActive ? "Live Schedule" : "Auto-Playlist"}
+            <Radio className="w-3 h-3" /> {liveClockActive ? "Live Edge" : "Auto-Playlist"}
           </span>
           <span className="truncate text-zinc-200 font-medium">
             {currentItem.title || `${channelName} — Program ${activeIndex + 1} of ${items.length}`}
