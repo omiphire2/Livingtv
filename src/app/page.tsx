@@ -58,38 +58,25 @@ const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => 
 });
 
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncPlatformLogo = async () => {
-      const localLogo = window.localStorage.getItem("livingtv_platform_logo_url")?.trim();
-      if (localLogo) setLogoUrl(localLogo);
-      try {
-        const supabase = (await import("@/lib/supabase/client")).createClient();
-        const { data } = await supabase
-          .from("site_settings")
-          .select("logo_url")
-          .eq("id", 1)
-          .maybeSingle();
-        if (data?.logo_url) {
-          setLogoUrl(data.logo_url);
-          window.localStorage.setItem("livingtv_platform_logo_url", data.logo_url);
-        }
-      } catch {
-        // Ignore if site_settings is unavailable
-      }
-    };
-    void syncPlatformLogo();
-    const onUpdate = () => { void syncPlatformLogo(); };
-    window.addEventListener("livingtv:site-settings-updated", onUpdate);
-    window.addEventListener("storage", onUpdate);
-    return () => {
-      window.removeEventListener("livingtv:site-settings-updated", onUpdate);
-      window.removeEventListener("storage", onUpdate);
-    };
-  }, []);
-
   return () => listener.subscription.unsubscribe();
 }, [supabase, loadUserRole]);
+
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  const applyCachedLogo = () => {
+    const localLogo = window.localStorage.getItem("livingtv_platform_logo_url")?.trim();
+    if (localLogo) {
+      setLogoUrl((prev) => (prev === localLogo ? prev : localLogo));
+    }
+  };
+  applyCachedLogo();
+  window.addEventListener("livingtv:site-settings-updated", applyCachedLogo);
+  window.addEventListener("storage", applyCachedLogo);
+  return () => {
+    window.removeEventListener("livingtv:site-settings-updated", applyCachedLogo);
+    window.removeEventListener("storage", applyCachedLogo);
+  };
+}, []);
 
 useEffect(() => {
 const loadInitial = async () => {
