@@ -70,7 +70,7 @@ const loadChannel = async () => {
 
     const { data: plData, error: plErr } = await supabase
       .from("channel_playlist_items")
-      .select("id, youtube_url, youtube_id, title, sort_order")
+      .select("id, youtube_url, youtube_id, title, sort_order, duration_sec")
       .eq("channel_id", channelId)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
@@ -99,7 +99,7 @@ loadChannel();
         async () => {
           const { data: updated } = await supabase
             .from("channel_playlist_items")
-            .select("id, youtube_url, youtube_id, title, sort_order")
+            .select("id, youtube_url, youtube_id, title, sort_order, duration_sec")
             .eq("channel_id", channelId)
             .order("sort_order", { ascending: true })
             .order("created_at", { ascending: true });
@@ -212,7 +212,7 @@ return (
       <>
         <div className="max-h-[260px] sm:max-h-[340px] overflow-hidden rounded-xl border border-zinc-800 bg-black [&>div]:!aspect-auto [&>div]:!h-[260px] sm:[&>div]:!h-[340px]">
           {!channel.custom_hls_url && playlistItems.length > 0 ? (
-              <YouTubePlaylistPlayer items={playlistItems} channelName={channel.channel_name} />
+              <YouTubePlaylistPlayer items={playlistItems} channelName={channel.channel_name} playlistStartedAt={(channel as Channel & { playlist_started_at?: string | null }).playlist_started_at} />
             ) : (
               <HlsPlayer
             streamUrl={streamUrl}

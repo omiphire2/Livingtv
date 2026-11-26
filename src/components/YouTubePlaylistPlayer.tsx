@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { SkipForward, Tv } from "lucide-react";
+import { Radio, SkipForward, Volume2, VolumeX } from "lucide-react";
 
 export interface PlaylistProgramItem {
   id: string;
@@ -9,6 +9,7 @@ export interface PlaylistProgramItem {
   youtube_id: string;
   title?: string | null;
   sort_order: number;
+  duration_sec?: number | null;
 }
 
 declare global {
@@ -35,8 +36,13 @@ declare global {
 }
 
 interface YTPlayerInstance {
-  loadVideoById?: (videoId: string) => void;
+  loadVideoById?: (
+    videoId: string | { videoId: string; startSeconds?: number }
+  ) => void;
   playVideo?: () => void;
+  mute?: () => void;
+  unMute?: () => void;
+  isMuted?: () => boolean;
   destroy?: () => void;
 }
 
@@ -66,45 +72,103 @@ function loadYouTubeIframeApi(): Promise<void> {
   return ytApiPromise;
 }
 
+function computeLiveSlot(
+  items: PlaylistProgramItem[],
+  playlistStartedAt?: string | null
+): { index: number; startSec: number; isLiveClock: boolean } {
+  if (items.length === 0) return { index: 0, startSec: 0, isLiveClock: false };
+
+  const validDurations = items.map((item) =>
+    typeof item.duration_sec === "number" && item.duration_sec > 0 ? item.duration_sec : 0
+  );
+  const allHaveDuration = validDurations.every((d) => d > 0);
+  const totalSec = validDurations.reduce((acc, d) => acc + d, 0);
+  const startMs = playlistStartedAt ? Date.parse(playlistStartedAt) : NaN;
+
+  if (!allHaveDuration || totalSec <= 0 || Number.isNaN(startMs)) {
+    return { index: 0, startSec: 0, isLiveClock: false };
+  }
+
+  const elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+  const loopPos = elapsedSec % totalSec;
+
+  let cursor = 0;
+  for (let i = 0; i < items.length; i++) {
+    const dur = validDurations[i];
+    if (loopPos < cursor + dur) {
+      return { index: i, startSec: Math.max(0, loopPos - cursor), isLiveClock: true };
+    }
+    cursor += dur;
+  }
+
+  return { index: 0, startSec: 0, isLiveClock: true };
+}
+
 export default function YouTubePlaylistPlayer({
   items,
   channelName,
+  playlistStartedAt,
 }: {
   items: PlaylistProgramItem[];
   channelName: string;
+  playlistStartedAt?: string | null;
 }) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const initialSlot = computeLiveSlot(items, playlistStartedAt);
+  const [activeIndex, setActiveIndex] = useState(initialSlot.index);
+  const [muted, setMuted] = useState(true);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const itemsRef = useRef<PlaylistProgramItem[]>(items);
-  const indexRef = useRef<number>(0);
+  const startedAtRef = useRef<string | null | undefined>(playlistStartedAt);
+  const indexRef = useRef<number>(initialSlot.index);
+  const nextStartSecRef = useRef<number>(initialSlot.startSec);
 
   itemsRef.current = items;
+  startedAtRef.current = playlistStartedAt;
 
   useEffect(() => {
     if (items.length === 0) {
       setActiveIndex(0);
       indexRef.current = 0;
+      nextStartSecRef.current = 0;
       return;
     }
-    if (activeIndex >= items.length) {
-      setActiveIndex(0);
-      indexRef.current = 0;
-    } else {
-      indexRef.current = activeIndex;
-    }
-  }, [items, activeIndex]);
+
+    const slot = computeLiveSlot(items, playlistStartedAt);
+    const safeIdx = slot.isLiveClock
+      ? slot.index
+      : Math.min(activeIndex, items.length - 1);
+
+    nextStartSecRef.current = slot.isLiveClock ? slot.startSec : 0;
+    indexRef.current = safeIdx;
+    setActiveIndex(safeIdx);
+  }, [items, playlistStartedAt]);
 
   const advanceToNext = () => {
     const len = itemsRef.current.length;
     if (len === 0) return;
     const nextIdx = (indexRef.current + 1) % len;
     indexRef.current = nextIdx;
+    nextStartSecRef.current = 0;
     setActiveIndex(nextIdx);
     const nextItem = itemsRef.current[nextIdx];
     if (nextItem && playerRef.current?.loadVideoById) {
-      playerRef.current.loadVideoById(nextItem.youtube_id);
+      playerRef.current.loadVideoById({ videoId: nextItem.youtube_id, startSeconds: 0 });
       playerRef.current.playVideo?.();
+    }
+  };
+
+  const toggleMute = () => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (muted) {
+      p.unMute?.();
+      p.playVideo?.();
+      setMuted(false);
+    } else {
+      p.mute?.();
+      setMuted(true);
     }
   };
 
@@ -112,7 +176,10 @@ export default function YouTubePlaylistPlayer({
     if (items.length === 0 || !containerRef.current) return;
 
     let cancelled = false;
-    const firstVideo = items[indexRef.current]?.youtube_id || items[0].youtube_id;
+    const slot = computeLiveSlot(itemsRef.current, startedAtRef.current);
+    const firstItem = itemsRef.current[slot.index] || itemsRef.current[0];
+    indexRef.current = slot.index;
+    nextStartSecRef.current = slot.startSec;
 
     loadYouTubeIframeApi().then(() => {
       if (cancelled || !containerRef.current || !window.YT?.Player) return;
@@ -126,15 +193,18 @@ export default function YouTubePlaylistPlayer({
       const endedCode = window.YT.PlayerState?.ENDED ?? 0;
 
       playerRef.current = new window.YT.Player(mountNode, {
-        videoId: firstVideo,
+        videoId: firstItem.youtube_id,
         playerVars: {
           autoplay: 1,
+          mute: 1,
+          start: slot.startSec,
           rel: 0,
           modestbranding: 1,
           playsinline: 1,
         },
         events: {
           onReady: (event) => {
+            event.target.mute?.();
             event.target.playVideo?.();
           },
           onStateChange: (event) => {
@@ -151,40 +221,55 @@ export default function YouTubePlaylistPlayer({
       playerRef.current?.destroy?.();
       playerRef.current = null;
     };
-    // Recreate player only when the playlist switches from empty to non-empty
   }, [items.length > 0]);
 
   useEffect(() => {
     const current = items[activeIndex];
     if (!current || !playerRef.current?.loadVideoById) return;
-    playerRef.current.loadVideoById(current.youtube_id);
+    playerRef.current.loadVideoById({
+      videoId: current.youtube_id,
+      startSeconds: nextStartSecRef.current,
+    });
     playerRef.current.playVideo?.();
+    nextStartSecRef.current = 0;
   }, [activeIndex, items]);
 
   if (items.length === 0) return null;
 
   const currentItem = items[activeIndex] || items[0];
+  const liveClockActive = computeLiveSlot(items, playlistStartedAt).isLiveClock;
 
   return (
     <div className="relative w-full h-full bg-black flex flex-col">
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-zinc-900/95 border-b border-zinc-800 text-xs">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px] uppercase shrink-0 inline-flex items-center gap-1">
-            <Tv className="w-3 h-3" /> Auto-Playlist
+          <span className="px-1.5 py-0.5 rounded bg-red-600/20 text-red-300 font-bold text-[10px] uppercase shrink-0 inline-flex items-center gap-1">
+            <Radio className="w-3 h-3" /> {liveClockActive ? "Live Schedule" : "Auto-Playlist"}
           </span>
           <span className="truncate text-zinc-200 font-medium">
             {currentItem.title || `${channelName} — Program ${activeIndex + 1} of ${items.length}`}
           </span>
         </div>
-        {items.length > 1 && (
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={advanceToNext}
-            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] inline-flex items-center gap-1 shrink-0"
+            onClick={toggleMute}
+            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] inline-flex items-center gap-1"
+            title={muted ? "Unmute stream" : "Mute stream"}
           >
-            Next <SkipForward className="w-3 h-3" />
+            {muted ? <VolumeX className="w-3 h-3 text-amber-400" /> : <Volume2 className="w-3 h-3 text-emerald-400" />}
+            {muted ? "Unmute" : "Muted"}
           </button>
-        )}
+          {items.length > 1 && (
+            <button
+              type="button"
+              onClick={advanceToNext}
+              className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] inline-flex items-center gap-1"
+            >
+              Next <SkipForward className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
       <div ref={containerRef} className="w-full flex-1 min-h-0" />
     </div>
