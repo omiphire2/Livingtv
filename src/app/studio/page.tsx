@@ -305,7 +305,7 @@ export default function StreamerStudioPage() {
           clearInterval(interval);
           setTrialActive(false);
           setStatusMsg(
-            "Free trial expired after 10 minutes of streaming! You must pay ₦20,000 to continue streaming."
+            "Free trial expired after 10 minutes of streaming! You must pay ₦30,000 to continue streaming."
           );
           supabase
             .from("profiles")
@@ -545,7 +545,7 @@ export default function StreamerStudioPage() {
     }
     if (profile?.trial_used) {
       setStatusMsg(
-        "Your one-time 10-minute free trial has already been used. Pay ₦20,000 to activate streaming."
+        "Your one-time 10-minute free trial has already been used. Pay ₦30,000 to activate streaming."
       );
       return;
     }
@@ -616,7 +616,7 @@ export default function StreamerStudioPage() {
         : prev
     );
     setStatusMsg(
-      "One-time 10-minute free trial started! After 10 minutes, you must pay ₦20,000."
+      "One-time 10-minute free trial started! After 10 minutes, you must pay ₦30,000."
     );
     setLoading(false);
   };
@@ -652,62 +652,82 @@ export default function StreamerStudioPage() {
     setLoading(true);
     setStatusMsg("");
 
-    const refCode = `LTV-20K-${Date.now()}`;
-    const { error: txError } = await supabase.from("transactions").insert({
-      user_id: userId,
-      reference: refCode,
-      amount_ngn: 20000,
-      purpose: "channel_activation",
-      status: "success",
-    });
-
-    if (txError) {
-      setStatusMsg(`Activation payment error: ${txError.message}`);
+    const { data: authData } = await supabase.auth.getUser();
+    const payerEmail = authData.user?.email || profile?.email || "";
+    if (!payerEmail) {
+      setStatusMsg("Could not find an account email for Paystack checkout.");
       setLoading(false);
       return;
     }
 
-    await supabase
-      .from("profiles")
-      .update({
-        role: profile?.role === "admin" ? "admin" : "streamer",
-        is_verified_streamer: true,
-        is_monetized: true,
-      })
-      .eq("id", userId);
+    const callbackUrl = `${window.location.origin}/studio?uid=${encodeURIComponent(userId)}`;
+    const res = await fetch("/api/paystack/initialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        email: payerEmail,
+        callbackUrl,
+        channelName: channelName.trim() || "LivingTV Creator Channel",
+        category,
+        description: description.trim() || null,
+        channelLogoUrl: channelLogoUrl.trim() || null,
+      }),
+    });
 
-    if (!channel) {
-      const { data: createdCh } = await supabase
-        .from("channels")
-        .insert({
-          owner_id: userId,
-          channel_name: channelName.trim() || "LivingTV Creator Channel",
-          category,
-          logo_url: channelLogoUrl.trim() || null,
-          description: description.trim() || null,
-          is_live: false,
-          comments_enabled: true,
-          status: "active",
-        })
-        .select()
-        .single();
-
-      if (createdCh) setChannel(createdCh as Channel);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.authorization_url) {
+      setStatusMsg(data?.error || "Failed to start Paystack checkout.");
+      setLoading(false);
+      return;
     }
 
-    setTrialActive(false);
-    setHasVerifiedPayment(true);
-    setStatusMsg(
-      "Channel activated (₦20,000)! Unlimited streaming & ad revenue share are now active."
-    );
-    await loadStudioData(userId);
-    setLoading(false);
+    window.location.href = data.authorization_url;
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("reference") || params.get("trxref");
+    const qUid = params.get("uid") || userId || "";
+    if (!ref) return;
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const res = await fetch(
+        `/api/paystack/verify?reference=${encodeURIComponent(ref)}&userId=${encodeURIComponent(qUid)}`
+      );
+      const data = await res.json().catch(() => ({}));
+      if (cancelled) return;
+
+      if (res.ok && data?.ok) {
+        const targetUid = data.userId || qUid;
+        setTrialActive(false);
+        setHasVerifiedPayment(true);
+        setStatusMsg(
+          "Paystack payment verified (₦30,000)! Your channel is now activated and monetized."
+        );
+        if (targetUid) {
+          await loadStudioData(targetUid);
+        }
+      } else {
+        setStatusMsg(data?.error || "Payment verification pending or unsuccessful.");
+      }
+
+      window.history.replaceState({}, "", "/studio");
+      setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const toggleComments = async () => {
     if (!channel) return;
     if (!hasVerifiedPayment && !trialActive) {
-      setStatusMsg("Your 10-minute trial has ended. Pay ₦20,000 to continue streaming.");
+      setStatusMsg("Your 10-minute trial has ended. Pay ₦30,000 to continue streaming.");
       return;
     }
 
@@ -767,17 +787,17 @@ export default function StreamerStudioPage() {
               <span className="text-xs uppercase font-bold text-amber-400">
                 {trialExpired
                   ? "10-Minute Free Trial Expired — Payment Required"
-                  : "10-Minute Free Trial (Once Per Account) or ₦20,000 Activation"}
+                  : "10-Minute Free Trial (Once Per Account) or ₦30,000 Activation"}
               </span>
               <h2 className="text-lg font-bold text-white mt-1">
                 {trialExpired
-                  ? "Your 10-Minute Free Trial Ended — Pay ₦20,000 to Stream"
-                  : "Add Your Channel: Start 10-Min Free Trial or Pay ₦20,000"}
+                  ? "Your 10-Minute Free Trial Ended — Pay ₦30,000 to Stream"
+                  : "Add Your Channel: Start 10-Min Free Trial or Pay ₦30,000"}
               </h2>
               <p className="text-xs text-zinc-400 mt-1">
                 {trialExpired
-                  ? "The one-time 10-minute free trial has expired. Pay ₦20,000 once to unlock unlimited streaming and ad revenue share."
-                  : "Get a one-time 10-minute free streaming trial first, or pay ₦20,000 directly for full channel activation and ad revenue share."}
+                  ? "The one-time 10-minute free trial has expired. Pay ₦30,000 once to unlock unlimited streaming and ad revenue share."
+                  : "Get a one-time 10-minute free streaming trial first, or pay ₦30,000 directly for full channel activation and ad revenue share."}
               </p>
             </div>
 
@@ -839,7 +859,7 @@ export default function StreamerStudioPage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <div className="text-sm font-semibold text-white">
-                  Full Channel Activation — ₦20,000
+                  Full Channel Activation — ₦30,000
                 </div>
                 <div className="text-xs text-zinc-400">
                   Unlimited streaming + 15-minute video ad & banner revenue sharing.
@@ -862,7 +882,7 @@ export default function StreamerStudioPage() {
                   disabled={loading}
                   className="px-5 py-2.5 rounded-lg bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 disabled:opacity-50"
                 >
-                  {loading ? "Activating..." : "Activate Channel (₦20,000)"}
+                  {loading ? "Activating..." : "Activate Channel (₦30,000)"}
                 </button>
               </div>
             </div>
@@ -878,7 +898,7 @@ export default function StreamerStudioPage() {
                       Free Trial Time Left: {formatCountdown(trialRemainingSec)}
                     </div>
                     <div className="text-xs text-zinc-300">
-                      One-time 10-minute trial running. When it ends, you must pay ₦20,000.
+                      One-time 10-minute trial running. When it ends, you must pay ₦30,000.
                     </div>
                   </div>
                 </div>
@@ -888,7 +908,7 @@ export default function StreamerStudioPage() {
                   disabled={loading}
                   className="px-4 py-2 rounded-lg bg-amber-500 text-black font-bold text-xs hover:bg-amber-400"
                 >
-                  Pay ₦20,000 Now
+                  Pay ₦30,000 Now
                 </button>
               </div>
             )}
