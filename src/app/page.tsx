@@ -298,21 +298,32 @@ return (
             />
           </div>
 
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 text-[11px] font-bold uppercase rounded bg-red-600 text-white">
-                  {primaryChannel.is_live ? "LIVE" : "CHANNEL 1"}
-                </span>
-                <h1 className="text-lg font-bold text-white">{primaryChannel.channel_name}</h1>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 text-[11px] font-bold uppercase rounded bg-red-600 text-white">
+                    {primaryChannel.is_live ? "LIVE" : "CHANNEL 1"}
+                  </span>
+                  <h1 className="text-lg font-bold text-white">{primaryChannel.channel_name}</h1>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {primaryChannel.description || "Unlimited live broadcast via vMix / OBS"}
+                </p>
               </div>
-              <p className="text-xs text-zinc-400 mt-1">
-                {primaryChannel.description || "Unlimited live broadcast via vMix / OBS"}
-              </p>
+              <span className="text-xs px-3 py-1 rounded-full bg-zinc-800 text-zinc-300">
+                {primaryChannel.category}
+              </span>
             </div>
-            <span className="text-xs px-3 py-1 rounded-full bg-zinc-800 text-zinc-300">
-              {primaryChannel.category}
-            </span>
+
+            {/* Channel 1 only: sideways-scrolling comments below title + small message icon */}
+            <LiveComments
+              channelId={primaryChannel.id}
+              commentsEnabled={primaryChannel.comments_enabled}
+              userId={user?.id}
+              userEmail={user?.email}
+              showSidewaysStrip
+            />
           </div>
         </>
       ) : (
@@ -388,17 +399,6 @@ return (
     </div>
 
     <aside className="lg:col-span-4 space-y-5">
-      {primaryChannel && (
-        <div className="[&>div]:!h-[240px]">
-          <LiveComments
-            channelId={primaryChannel.id}
-            commentsEnabled={primaryChannel.comments_enabled}
-            userId={user?.id}
-            userEmail={user?.email}
-          />
-        </div>
-      )}
-
       {sidebarAds.map((ad) => (
         <div
           key={ad.id}
