@@ -1,5 +1,6 @@
 "use client";
 
+import MessageScroller from "@/components/MessageScroller";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -336,6 +337,7 @@ return (
       )}
 
       <section className="space-y-3">
+        <MessageScroller className="mb-3" />
         <h2 className="text-base font-semibold text-white">All Channels</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {channels.map((ch, idx) => {

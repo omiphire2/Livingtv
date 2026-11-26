@@ -85,6 +85,10 @@ export default function AdminChannelsPage() {
   const [category, setCategory] = useState<string>("Entertainment");
   const [description, setDescription] = useState<string>("");
   const [logoUrl, setLogoUrl] = useState<string>("");
+  const [platformLogoUrl, setPlatformLogoUrl] = useState<string>("");
+  const [scrollMessage, setScrollMessage] = useState<string>("");
+  const [scrollActive, setScrollActive] = useState<boolean>(false);
+  const [brandingMsg, setBrandingMsg] = useState<string>("");
   const [streamKey, setStreamKey] = useState<string>("tv_pending_key");
   const [customHlsUrl, setCustomHlsUrl] = useState<string>("");
   const [isLive, setIsLive] = useState<boolean>(true);
@@ -219,7 +223,35 @@ export default function AdminChannelsPage() {
       syncAuthAndRole();
     });
 
-    return () => {
+    
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedLogo = window.localStorage.getItem("livingtv_platform_logo_url") || "";
+    const savedScroll = window.localStorage.getItem("livingtv_scroll_message") || "";
+    const savedActive = window.localStorage.getItem("livingtv_scroll_active") === "true";
+    if (savedLogo) setPlatformLogoUrl(savedLogo);
+    if (savedScroll) setScrollMessage(savedScroll);
+    setScrollActive(savedActive || Boolean(savedScroll.trim()));
+
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("site_settings")
+          .select("logo_url, scroll_message, scroll_active")
+          .eq("id", 1)
+          .maybeSingle();
+        if (data) {
+          if (data.logo_url) setPlatformLogoUrl(data.logo_url);
+          if (typeof data.scroll_message === "string") setScrollMessage(data.scroll_message);
+          if (typeof data.scroll_active === "boolean") setScrollActive(data.scroll_active);
+        }
+      } catch {
+        // Fallback to localStorage if site_settings table is not yet created
+      }
+    })();
+  }, [supabase]);
+
+  return () => {
       authListener.subscription.unsubscribe();
     };
   }, [supabase]);
@@ -762,6 +794,110 @@ export default function AdminChannelsPage() {
           </button>
         </div>
       </form>
+
+      
+      {/* Platform Logo & Live Message Scroller Controls */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Platform Logo &amp; Message Scroller</h2>
+            <p className="text-xs text-zinc-400">
+              Update the main LivingTV header logo (separate from channel logos) and control the scrolling screen message on channel lists and channel pages.
+            </p>
+          </div>
+          {platformLogoUrl && (
+            <img
+              src={platformLogoUrl}
+              alt="Platform Logo Preview"
+              className="h-9 w-auto rounded bg-zinc-950 border border-zinc-800 object-contain px-2 py-1"
+            />
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-zinc-300">
+              Platform / Site Logo URL
+            </label>
+            <input
+              type="text"
+              value={platformLogoUrl}
+              onChange={(e) => setPlatformLogoUrl(e.target.value)}
+              placeholder="https://... (LivingTV brand logo URL)"
+              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-zinc-300">
+              Scrolling Message Text (active when entered &amp; enabled)
+            </label>
+            <input
+              type="text"
+              value={scrollMessage}
+              onChange={(e) => {
+                const val = e.target.value;
+                setScrollMessage(val);
+                if (!val.trim()) setScrollActive(false);
+                else setScrollActive(true);
+              }}
+              placeholder="Type message to scroll across channel list & channel view..."
+              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="inline-flex items-center gap-2 text-xs text-zinc-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={scrollActive && Boolean(scrollMessage.trim())}
+              onChange={(e) => setScrollActive(e.target.checked && Boolean(scrollMessage.trim()))}
+              className="rounded border-zinc-700 bg-zinc-950"
+            />
+            Show scrolling message bar when message is set
+          </label>
+
+          <button
+            type="button"
+            onClick={async () => {
+              const cleanLogo = platformLogoUrl.trim();
+              const cleanMsg = scrollMessage.trim();
+              const isActive = Boolean(cleanMsg) && scrollActive;
+              window.localStorage.setItem("livingtv_platform_logo_url", cleanLogo);
+              window.localStorage.setItem("livingtv_scroll_message", cleanMsg);
+              window.localStorage.setItem("livingtv_scroll_active", String(isActive));
+              window.dispatchEvent(new Event("livingtv:site-settings-updated"));
+
+              try {
+                await supabase.from("site_settings").upsert(
+                  {
+                    id: 1,
+                    logo_url: cleanLogo || null,
+                    scroll_message: cleanMsg,
+                    scroll_active: isActive,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: "id" }
+                );
+              } catch {
+                // Local update already applied
+              }
+
+              setBrandingMsg(
+                isActive
+                  ? "Saved platform logo and activated scrolling message."
+                  : "Saved platform logo and updated message scroller."
+              );
+            }}
+            className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs"
+          >
+            Save Logo &amp; Scroll Message
+          </button>
+        </div>
+
+        {brandingMsg && <p className="text-xs text-emerald-400">{brandingMsg}</p>}
+      </div>
 
       {/* All Channels Table */}
       <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-4">

@@ -42,3 +42,22 @@ body {
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
+
+@keyframes livingtvMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-33.333%);
+  }
+}
+
+.livingtv-marquee-track {
+  display: inline-flex;
+  width: max-content;
+  animation: livingtvMarquee 18s linear infinite;
+}
+
+.livingtv-marquee-track:hover {
+  animation-play-state: paused;
+}

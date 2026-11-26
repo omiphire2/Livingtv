@@ -1,5 +1,6 @@
 "use client";
 
+import MessageScroller from "@/components/MessageScroller";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -155,6 +156,7 @@ const streamUrl = channel?.custom_hls_url
 
 return (
 <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <MessageScroller />
   <header className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur sticky top-0 z-30">
     <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
       <div className="flex items-center gap-3">
