@@ -14,7 +14,7 @@ compact?: boolean;
 showSidewaysStrip?: boolean;
 }
 
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 2 * 60 * 60 * 1000;
 const INITIAL_VISIBLE_COUNT = 5;
 
 function isWithin24Hours(createdAt: string): boolean {
@@ -55,8 +55,8 @@ const loadRecentComments = async () => {
 
   if (error) {
     setStatusNote(`Could not load comments: ${error.message}`);
-    return;
-  }
+      return;
+    }
 
   if (data) {
     setComments((data as CommentItem[]).filter((c) => isWithin24Hours(c.created_at)));
@@ -118,20 +118,15 @@ setStatusNote("");
 
 if (!commentsEnabled) {
   setStatusNote("Commenting is currently turned OFF for this channel.");
-  return;
-}
+    return;
+  }
 
 const trimmed = message.trim();
 if (!trimmed) return;
 
 const { data: authData } = await supabase.auth.getUser();
-const activeUserId = authData.user?.id || userId;
+const activeUserId = authData.user?.id || userId || null;
 const activeEmail = authData.user?.email || userEmail;
-
-if (!activeUserId) {
-  setStatusNote("Sign in first to post a comment.");
-  return;
-}
 
 setSending(true);
 const displayName = activeEmail ? activeEmail.split("@")[0] : "Viewer";
@@ -283,7 +278,7 @@ return (
     <div>
       <h3 className="font-semibold text-xs sm:text-sm text-white">Live Comments</h3>
       <span className="text-[10px] text-zinc-400 inline-flex items-center gap-1">
-        <Clock className="w-2.5 h-2.5 text-amber-400" /> Auto-disappears after 24h
+        <Clock className="w-2.5 h-2.5 text-amber-400" /> Auto-disappears after 2h
       </span>
     </div>
     <span
@@ -361,7 +356,7 @@ return (
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder={userId ? "Write a comment..." : "Sign in to comment..."}
+          placeholder="Write a comment..."
           className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500"
         />
         <button
