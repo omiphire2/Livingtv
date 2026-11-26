@@ -112,33 +112,7 @@ loadChannel();
       .subscribe();
 
     
-  const [platformLogo, setPlatformLogo] = useState<string>("");
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const loadLogo = async () => {
-      const cached = window.localStorage.getItem("livingtv_platform_logo_url")?.trim();
-      if (cached) setPlatformLogo(cached);
-      try {
-        const { createClient } = await import("@/lib/supabase/client");
-        const sb = createClient();
-        const { data } = await sb.from("site_settings").select("logo_url").eq("id", 1).maybeSingle();
-        if (data?.logo_url) {
-          setPlatformLogo(data.logo_url);
-          window.localStorage.setItem("livingtv_platform_logo_url", data.logo_url);
-        }
-      } catch {
-        // Keep cached value
-      }
-    };
-    void loadLogo();
-    const onUpdate = () => { void loadLogo(); };
-    window.addEventListener("livingtv:site-settings-updated", onUpdate);
-    window.addEventListener("storage", onUpdate);
-    return () => {
-      window.removeEventListener("livingtv:site-settings-updated", onUpdate);
-      window.removeEventListener("storage", onUpdate);
-    };
-  }, []);
+
 
   return () => {
       supabase.removeChannel(channelSub);
@@ -182,6 +156,24 @@ const streamUrl = channel?.custom_hls_url
 : channel?.stream_key
 ? `${baseHlsUrl.replace(/\/+$/, "")}/${channel.stream_key.trim()}/index.m3u8`
 : "";
+
+const [platformLogo, setPlatformLogo] = useState<string>("");
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  const syncCachedLogo = () => {
+    const cached = window.localStorage.getItem("livingtv_platform_logo_url")?.trim();
+    if (cached) {
+      setPlatformLogo((prev) => (prev === cached ? prev : cached));
+    }
+  };
+  syncCachedLogo();
+  window.addEventListener("livingtv:site-settings-updated", syncCachedLogo);
+  window.addEventListener("storage", syncCachedLogo);
+  return () => {
+    window.removeEventListener("livingtv:site-settings-updated", syncCachedLogo);
+    window.removeEventListener("storage", syncCachedLogo);
+  };
+}, []);
 
 return (
 <div className="min-h-screen bg-zinc-950 text-zinc-100">
