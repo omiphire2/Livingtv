@@ -157,23 +157,49 @@ const streamUrl = channel?.custom_hls_url
 ? `${baseHlsUrl.replace(/\/+$/, "")}/${channel.stream_key.trim()}/index.m3u8`
 : "";
 
-const [platformLogo, setPlatformLogo] = useState<string>("");
 useEffect(() => {
   if (typeof window === "undefined") return;
-  const syncCachedLogo = () => {
+  let active = true;
+
+  const syncGlobalLogo = async () => {
     const cached = window.localStorage.getItem("livingtv_platform_logo_url")?.trim();
-    if (cached) {
-      setPlatformLogo((prev) => (prev === cached ? prev : cached));
+    if (cached && active) {
+      setLogoUrl((prev) => (prev === cached ? prev : cached));
+    }
+    try {
+      const { data } = await supabase
+        .from("site_settings")
+        .select("logo_url")
+        .eq("id", 1)
+        .maybeSingle();
+      const dbLogo = typeof data?.logo_url === "string" ? data.logo_url.trim() : "";
+      if (dbLogo && active) {
+        setLogoUrl((prev) => (prev === dbLogo ? prev : dbLogo));
+        window.localStorage.setItem("livingtv_platform_logo_url", dbLogo);
+      }
+    } catch {
+      // Keep local/existing logo if offline or policy blocks
     }
   };
-  syncCachedLogo();
-  window.addEventListener("livingtv:site-settings-updated", syncCachedLogo);
-  window.addEventListener("storage", syncCachedLogo);
-  return () => {
-    window.removeEventListener("livingtv:site-settings-updated", syncCachedLogo);
-    window.removeEventListener("storage", syncCachedLogo);
+
+  void syncGlobalLogo();
+  const pollId = window.setInterval(() => {
+    void syncGlobalLogo();
+  }, 10000);
+
+  const onUpdate = () => {
+    void syncGlobalLogo();
   };
-}, []);
+  window.addEventListener("livingtv:site-settings-updated", onUpdate);
+  window.addEventListener("storage", onUpdate);
+
+  return () => {
+    active = false;
+    window.clearInterval(pollId);
+    window.removeEventListener("livingtv:site-settings-updated", onUpdate);
+    window.removeEventListener("storage", onUpdate);
+  };
+}, [supabase]);
 
 return (
 <div className="min-h-screen bg-zinc-950 text-zinc-100">
