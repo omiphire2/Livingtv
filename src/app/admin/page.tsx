@@ -224,17 +224,17 @@ export default function AdminChannelsPage() {
     });
 
     
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const savedLogo = window.localStorage.getItem("livingtv_platform_logo_url") || "";
-    const savedScroll = window.localStorage.getItem("livingtv_scroll_message") || "";
-    const savedActive = window.localStorage.getItem("livingtv_scroll_active") === "true";
-    if (savedLogo) setPlatformLogoUrl(savedLogo);
-    if (savedScroll) setScrollMessage(savedScroll);
-    setScrollActive(savedActive || Boolean(savedScroll.trim()));
-
     void (async () => {
       try {
+        if (typeof window !== "undefined") {
+          const savedLogo = window.localStorage.getItem("livingtv_platform_logo_url") || "";
+          const savedScroll = window.localStorage.getItem("livingtv_scroll_message") || "";
+          const savedActive = window.localStorage.getItem("livingtv_scroll_active") === "true";
+          if (savedLogo) setPlatformLogoUrl(savedLogo);
+          if (savedScroll) setScrollMessage(savedScroll);
+          setScrollActive(savedActive || Boolean(savedScroll.trim()));
+        }
+
         const { data } = await supabase
           .from("site_settings")
           .select("logo_url, scroll_message, scroll_active")
@@ -249,9 +249,8 @@ export default function AdminChannelsPage() {
         // Fallback to localStorage if site_settings table is not yet created
       }
     })();
-  }, [supabase]);
 
-  return () => {
+    return () => {
       authListener.subscription.unsubscribe();
     };
   }, [supabase]);
