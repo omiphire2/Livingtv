@@ -757,7 +757,7 @@ export default function StreamerStudioPage() {
   const trialExpired = !hasFullAccess && Boolean(profile?.trial_used) && !trialActive;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-6">
+    <div className="livingtv-edge-shell min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <Link
