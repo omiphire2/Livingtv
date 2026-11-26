@@ -1,5 +1,7 @@
 "use client";
 
+import StudioYouTubePlaylist from "@/components/StudioYouTubePlaylist";
+
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -1244,7 +1246,9 @@ export default function StreamerStudioPage() {
             {/* vMix / OBS Stream Credentials */}
             {channel && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3">
-                <h3 className="font-semibold text-white">vMix & OBS Broadcast Settings</h3>
+                <StudioYouTubePlaylist channelId={channel.id} channelName={channel.channel_name} />
+
+            <h3 className="font-semibold text-white">vMix & OBS Broadcast Settings</h3>
                 <p className="text-xs text-zinc-400">
                   Use these details in vMix or OBS when your streaming server is linked.
                 </p>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AdItem, Channel } from "@/lib/types";
 import HlsPlayer from "@/components/HlsPlayer";
+import YouTubePlaylistPlayer, { PlaylistProgramItem } from "@/components/YouTubePlaylistPlayer";
 import AdCodeSlot from "@/components/AdCodeSlot";
 import LiveComments from "@/components/LiveComments";
 import StreamingAuthModal from "@/components/StreamingAuthModal";
@@ -27,6 +28,7 @@ const [ads, setAds] = useState<AdItem[]>([]);
 const [baseHlsUrl, setBaseHlsUrl] = useState<string>("");
 const [logoUrl, setLogoUrl] = useState<string>("");
 const [programs, setPrograms] = useState<UpcomingProgram[]>([]);
+  const [playlistItems, setPlaylistItems] = useState<PlaylistProgramItem[]>([]);
 const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
 const [authModalOpen, setAuthModalOpen] = useState(false);
 
@@ -64,13 +66,54 @@ const loadChannel = async () => {
     setPrograms(progData as UpcomingProgram[]);
   } else {
     setPrograms([]);
-  }
+    }
+
+    const { data: plData, error: plErr } = await supabase
+      .from("channel_playlist_items")
+      .select("id, youtube_url, youtube_id, title, sort_order")
+      .eq("channel_id", channelId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (!plErr && Array.isArray(plData)) {
+      setPlaylistItems(plData as PlaylistProgramItem[]);
+    } else {
+      setPlaylistItems([]);
+    }
 
   setLoading(false);
 };
 
 loadChannel();
-}, [channelId, supabase]);
+
+    const channelSub = supabase
+      .channel(`playlist-${channelId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "channel_playlist_items",
+          filter: `channel_id=eq.${channelId}`,
+        },
+        async () => {
+          const { data: updated } = await supabase
+            .from("channel_playlist_items")
+            .select("id, youtube_url, youtube_id, title, sort_order")
+            .eq("channel_id", channelId)
+            .order("sort_order", { ascending: true })
+            .order("created_at", { ascending: true });
+          if (Array.isArray(updated)) {
+            setPlaylistItems(updated as PlaylistProgramItem[]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelSub);
+    };
+  }, [channelId, supabase]);
 
 const handleLogImpression = useCallback(
 async (ad: AdItem, targetChannelId: string) => {
@@ -168,7 +211,10 @@ return (
     ) : (
       <>
         <div className="max-h-[260px] sm:max-h-[340px] overflow-hidden rounded-xl border border-zinc-800 bg-black [&>div]:!aspect-auto [&>div]:!h-[260px] sm:[&>div]:!h-[340px]">
-          <HlsPlayer
+          {!channel.custom_hls_url && playlistItems.length > 0 ? (
+              <YouTubePlaylistPlayer items={playlistItems} channelName={channel.channel_name} />
+            ) : (
+              <HlsPlayer
             streamUrl={streamUrl}
             channelId={channel.id}
             viewerId={user?.id}
@@ -177,6 +223,7 @@ return (
             pauseAds={pauseAds}
             onLogImpression={handleLogImpression}
           />
+            )}
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
