@@ -89,6 +89,7 @@ export default function AdminChannelsPage() {
   const [scrollMessage, setScrollMessage] = useState<string>("");
   const [scrollActive, setScrollActive] = useState<boolean>(false);
   const [brandingMsg, setBrandingMsg] = useState<string>("");
+  const [uploadingPlatformLogo, setUploadingPlatformLogo] = useState<boolean>(false);
   const [streamKey, setStreamKey] = useState<string>("tv_pending_key");
   const [customHlsUrl, setCustomHlsUrl] = useState<string>("");
   const [isLive, setIsLive] = useState<boolean>(true);
@@ -254,6 +255,46 @@ export default function AdminChannelsPage() {
       authListener.subscription.unsubscribe();
     };
   }, [supabase]);
+
+  
+  const handlePlatformLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPlatformLogo(true);
+    setBrandingMsg("");
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const filePath = `logos/platform_${Date.now()}.${ext}`;
+      const bucket = process.env.NEXT_PUBLIC_CHANNEL_LOGOS_BUCKET || "channel-logos";
+      const { error: upErr } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, { upsert: true });
+
+      if (upErr) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setPlatformLogoUrl(reader.result);
+            setBrandingMsg("Logo photo loaded from device. Click Save Logo & Scroll Message to publish.");
+          }
+          setUploadingPlatformLogo(false);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const { data: pubData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+      if (pubData?.publicUrl) {
+        setPlatformLogoUrl(pubData.publicUrl);
+        setBrandingMsg("Logo photo uploaded. Click Save Logo & Scroll Message to publish.");
+      }
+    } catch {
+      setBrandingMsg("Could not upload photo file.");
+    } finally {
+      setUploadingPlatformLogo(false);
+      e.target.value = "";
+    }
+  };
 
   const handleSelectChannelToEdit = (ch: ChannelRow) => {
     setMessage(null);
@@ -818,13 +859,24 @@ export default function AdminChannelsPage() {
             <label className="block text-xs font-medium text-zinc-300">
               Platform / Site Logo URL
             </label>
-            <input
-              type="text"
-              value={platformLogoUrl}
-              onChange={(e) => setPlatformLogoUrl(e.target.value)}
-              placeholder="https://... (LivingTV brand logo URL)"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={platformLogoUrl}
+                onChange={(e) => setPlatformLogoUrl(e.target.value)}
+                placeholder="Choose a photo or paste logo URL"
+                className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white"
+              />
+              <label className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-white font-medium cursor-pointer shrink-0">
+                {uploadingPlatformLogo ? "Uploading..." : "Add Photo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePlatformLogoUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
           </div>
 
           <div className="space-y-1.5">

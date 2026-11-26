@@ -59,11 +59,14 @@ export default function MessageScroller({
           window.localStorage.setItem(SCROLL_ACTIVE_STORAGE_KEY, String(dbActive));
         }
       } catch {
-        // Keep localStorage fallback when site_settings is not queried
+        // Keep localStorage fallback when site_settings is unreachable
       }
     };
 
     void syncFromLocalAndDb();
+    const pollId = window.setInterval(() => {
+      void syncFromLocalAndDb();
+    }, 10000);
 
     const onCustomUpdate = () => {
       void syncFromLocalAndDb();
@@ -72,6 +75,7 @@ export default function MessageScroller({
     window.addEventListener("storage", onCustomUpdate);
 
     return () => {
+      window.clearInterval(pollId);
       window.removeEventListener(SITE_SETTINGS_EVENT, onCustomUpdate);
       window.removeEventListener("storage", onCustomUpdate);
     };
