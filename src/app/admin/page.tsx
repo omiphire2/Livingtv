@@ -611,14 +611,14 @@ export default function AdminChannelsPage() {
 
   if (loading) {
     return (
-      <div className="livingtv-edge-shell min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-6">
+      <div className="livingtv-edge-shell min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-3.5 sm:p-6">
         Loading Admin Channel Manager...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-8 w-full max-w-none space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
         <div>
           <Link href="/" className="text-sm text-emerald-400 hover:underline">
@@ -798,7 +798,7 @@ export default function AdminChannelsPage() {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-6 pt-1">
+        <div className="flex flex-wrap items-center gap-3.5 sm:p-6 pt-1">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"
