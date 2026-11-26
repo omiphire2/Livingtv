@@ -1229,7 +1229,6 @@ export default function StreamerStudioPage() {
                   Use these details in vMix or OBS when your streaming server is linked.
                 </p>
 
-                {isAdmin && (
                   <div className="space-y-2 text-xs">
                     <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg p-3">
                       <div className="truncate pr-2">
@@ -1259,7 +1258,6 @@ export default function StreamerStudioPage() {
                       </button>
                     </div>
                   </div>
-                )}
               </div>
             )}
           </div>
