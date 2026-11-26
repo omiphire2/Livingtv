@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CommentItem } from "@/lib/types";
-import { ChevronDown, ChevronUp, Clock, MessageCircle, MessageSquareOff, Send } from "lucide-react";
+import { ChevronDown, ChevronUp, Clock, MessageCircle, MessageSquareOff, Send, Trash2 } from "lucide-react";
 
 interface LiveCommentsProps {
 channelId: string;
@@ -38,9 +38,26 @@ const [sending, setSending] = useState(false);
 const [statusNote, setStatusNote] = useState("");
 const [showAll, setShowAll] = useState(false);
 const [drawerOpen, setDrawerOpen] = useState(!showSidewaysStrip);
+const [currentUserId, setCurrentUserId] = useState<string | null>(userId || null);
+const [isChannelOwner, setIsChannelOwner] = useState(false);
 
 useEffect(() => {
 if (!channelId) return;
+
+let active = true;
+const loadOwnership = async () => {
+  const [{ data: authData }, { data: channelRow }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("channels").select("owner_id").eq("id", channelId).maybeSingle(),
+  ]);
+  if (!active) return;
+  const resolvedUserId = authData.user?.id || userId || null;
+  setCurrentUserId(resolvedUserId);
+  setIsChannelOwner(
+    Boolean(resolvedUserId && channelRow?.owner_id && resolvedUserId === channelRow.owner_id)
+  );
+};
+loadOwnership();
 
 const cutoffIso = new Date(Date.now() - TWENTY_FOUR_HOURS_MS).toISOString();
 
@@ -107,6 +124,7 @@ const pruneInterval = setInterval(() => {
 }, 60000);
 
 return () => {
+  active = false;
   clearInterval(pruneInterval);
   supabase.removeChannel(channelSub);
 };
@@ -125,7 +143,8 @@ const trimmed = message.trim();
 if (!trimmed) return;
 
 const { data: authData } = await supabase.auth.getUser();
-const activeUserId = authData.user?.id || userId || null;
+const activeUserId = authData.user?.id || userId || currentUserId || null;
+if (activeUserId) setCurrentUserId(activeUserId);
 const activeEmail = authData.user?.email || userEmail;
 
 setSending(true);
@@ -152,6 +171,21 @@ if (error) {
 }
 
 setSending(false);
+};
+
+const handleDeleteComment = async (commentId: string) => {
+  setStatusNote("");
+  const { error } = await supabase
+    .from("channel_comments")
+    .delete()
+    .eq("id", commentId);
+
+  if (error) {
+    setStatusNote(`Delete failed: ${error.message}`);
+    return;
+  }
+
+  setComments((prev) => prev.filter((item) => item.id !== commentId));
 };
 
 const visibleComments = showAll
@@ -209,12 +243,25 @@ return (
                   <span className="font-semibold text-emerald-400 mr-1.5">{c.user_name}:</span>
                   {c.message}
                 </p>
-                <span className="text-[10px] text-zinc-500 shrink-0">
+<div className="flex items-center gap-1.5 shrink-0">
+  <span className="text-[10px] text-zinc-500 shrink-0">
                   {new Date(c.created_at).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </span>
+  {isChannelOwner && (
+  <button
+    type="button"
+    onClick={() => handleDeleteComment(c.id)}
+    className="text-zinc-500 hover:text-red-400 transition p-0.5"
+    title="Delete comment"
+    aria-label="Delete comment"
+  >
+    <Trash2 className="w-3 h-3" />
+  </button>
+)}
+</div>
               </div>
             ))
           )}
@@ -314,12 +361,25 @@ return (
                 <span className="font-semibold text-emerald-400 text-[11px]">
                   {c.user_name}
                 </span>
-                <span className="text-[10px] text-zinc-500">
+<div className="flex items-center gap-1.5 shrink-0">
+  <span className="text-[10px] text-zinc-500">
                   {new Date(c.created_at).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </span>
+  {isChannelOwner && (
+  <button
+    type="button"
+    onClick={() => handleDeleteComment(c.id)}
+    className="text-zinc-500 hover:text-red-400 transition p-0.5"
+    title="Delete comment"
+    aria-label="Delete comment"
+  >
+    <Trash2 className="w-3 h-3" />
+  </button>
+)}
+</div>
               </div>
               <p className="text-zinc-200 break-words text-xs">{c.message}</p>
             </div>
