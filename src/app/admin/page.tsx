@@ -1,5 +1,7 @@
 "use client";
 
+import SupportChatPanel, { type StreamerThreadOption } from "@/components/SupportChatPanel";
+
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -380,7 +382,16 @@ export default function AdminChannelsPage() {
       setErrorMsg("You must be signed in.");
       return;
     }
-    if (!isAdmin) {
+    
+  const streamerChatOptions: StreamerThreadOption[] = channels
+    .filter((c) => Boolean(c.owner_id))
+    .map((c) => ({
+      streamer_id: String(c.owner_id),
+      channel_name: c.channel_name || "Untitled Channel",
+      email: null,
+    }));
+
+  if (!isAdmin) {
       setErrorMsg("Admin privileges are required to manage all channels.");
       return;
     }

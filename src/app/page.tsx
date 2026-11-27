@@ -1,5 +1,7 @@
 "use client";
 
+import SupportChatPanel from "@/components/SupportChatPanel";
+
 import MessageScroller from "@/components/MessageScroller";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";

@@ -1,5 +1,7 @@
 "use client";
 
+import SupportChatPanel from "@/components/SupportChatPanel";
+
 import MessageScroller from "@/components/MessageScroller";
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -22,6 +24,7 @@ description?: string | null;
 
 export default function ChannelDetailClient({ channelId }: { channelId: string }) {
 const supabase = createClient();
+  const [userId, setUserId] = useState<string | null>(null);
 
 const [channel, setChannel] = useState<Channel | null>(null);
 const [loading, setLoading] = useState(true);
@@ -34,6 +37,7 @@ const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
 const [authModalOpen, setAuthModalOpen] = useState(false);
 
 useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
 supabase.auth.getUser().then(({ data }) => {
   if (data.user) {
     setUser({ id: data.user.id, email: data.user.email });

@@ -1,5 +1,7 @@
 "use client";
 
+import SupportChatPanel from "@/components/SupportChatPanel";
+
 import StudioYouTubePlaylist from "@/components/StudioYouTubePlaylist";
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -802,6 +804,7 @@ export default function StreamerStudioPage() {
             <ArrowLeft className="w-4 h-4" /> Back to LivingTV
           </Link>
           <h1 className="text-xl font-bold text-white">Streamer Studio</h1>
+            <SupportChatPanel mode="streamer" userId={userId} streamerChannelName={channel?.channel_name || channelName} streamerDisplayName={profile?.email || null} />
         </div>
 
         {statusMsg && (
