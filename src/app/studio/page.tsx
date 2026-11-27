@@ -15,7 +15,6 @@ import {
   MessageSquare,
   MessageSquareOff,
   Play,
-  RotateCcw,
   Trash2,
   Tv,
   Upload,
@@ -680,27 +679,6 @@ export default function StreamerStudioPage() {
     setLoading(false);
   };
 
-  const handleResetTrialForTesting = async () => {
-    if (!userId) return;
-    setLoading(true);
-    await supabase
-      .from("profiles")
-      .update({
-        is_verified_streamer: false,
-        is_monetized: false,
-        trial_used: false,
-        trial_seconds_used: 0,
-        trial_started_at: null,
-      })
-      .eq("id", userId);
-
-    setHasVerifiedPayment(false);
-    setTrialActive(false);
-    setTrialRemainingSec(TRIAL_DURATION_SECONDS);
-    setStatusMsg("Free trial reset for testing (10 minutes available once).");
-    await loadStudioData(userId);
-    setLoading(false);
-  };
 
   const handleActivateStreamer = async () => {
     if (!userId) {
@@ -925,16 +903,6 @@ export default function StreamerStudioPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
-                {profile?.trial_used && (
-                  <button
-                    type="button"
-                    onClick={handleResetTrialForTesting}
-                    disabled={loading}
-                    className="px-3.5 py-2.5 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-300 hover:bg-zinc-800 text-xs font-semibold inline-flex items-center gap-1.5"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> Reset Trial (Test)
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={handleActivateStreamer}
