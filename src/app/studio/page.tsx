@@ -22,7 +22,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-const TRIAL_DURATION_SECONDS = 600; // 10 minutes
+const TRIAL_DURATION_SECONDS = 3600; // 1 hour
 const STORAGE_BUCKET = "livingtv-media";
 
 interface ProfileData {
@@ -35,6 +35,7 @@ interface ProfileData {
   total_earned_ngn: number;
   trial_used: boolean;
   trial_seconds_used: number;
+  trial_started_at?: string | null;
 }
 
 function formatCountdown(seconds: number): string {
@@ -123,14 +124,56 @@ export default function StreamerStudioPage() {
 
         setProfile(typedProf);
 
-        const usedSec = Number(typedProf.trial_seconds_used || 0);
-        const leftSec = Math.max(0, TRIAL_DURATION_SECONDS - usedSec);
+        const storageKey = `livingtv_trial_start_${uid}`;
+        const localStartIso =
+          typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+        const effectiveStartIso = typedProf.trial_started_at || localStartIso;
+        const startMs = effectiveStartIso ? Date.parse(effectiveStartIso) : NaN;
+
+        let elapsedSec = Number(typedProf.trial_seconds_used || 0);
+        if (!Number.isNaN(startMs) && startMs > 0) {
+          elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+          if (typeof window !== "undefined" && typedProf.trial_started_at) {
+            window.localStorage.setItem(storageKey, typedProf.trial_started_at);
+          }
+        } else if (typedProf.trial_used && elapsedSec > 0) {
+          const inferredStartIso = new Date(Date.now() - elapsedSec * 1000).toISOString();
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(storageKey, inferredStartIso);
+          }
+          void supabase
+            .from("profiles")
+            .update({ trial_started_at: inferredStartIso })
+            .eq("id", uid);
+        }
+
+        const clampedElapsed = Math.min(TRIAL_DURATION_SECONDS, elapsedSec);
+        const leftSec = Math.max(0, TRIAL_DURATION_SECONDS - elapsedSec);
         setTrialRemainingSec(leftSec);
 
         if (!actuallyPaid && typedProf.trial_used && leftSec > 0) {
           setTrialActive(true);
         } else {
           setTrialActive(false);
+          if (!actuallyPaid && typedProf.trial_used && leftSec <= 0) {
+            await supabase
+              .from("profiles")
+              .update({
+                trial_used: true,
+                trial_seconds_used: TRIAL_DURATION_SECONDS,
+              })
+              .eq("id", uid);
+            await supabase.from("channels").delete().eq("owner_id", uid);
+            setChannel(null);
+            setStatusMsg(
+              "Free trial expired after 1 hour! Your trial channel was deleted. Pay ₦30,000 to continue streaming."
+            );
+          } else if (clampedElapsed !== Number(typedProf.trial_seconds_used || 0)) {
+            void supabase
+              .from("profiles")
+              .update({ trial_seconds_used: clampedElapsed })
+              .eq("id", uid);
+          }
         }
       }
 
@@ -298,54 +341,68 @@ export default function StreamerStudioPage() {
   useEffect(() => {
     if (!trialActive || !userId || hasVerifiedPayment) return;
 
-    const interval = setInterval(async () => {
-      setTrialRemainingSec((prev) => {
-        const next = prev - 1;
-        const elapsed = TRIAL_DURATION_SECONDS - Math.max(0, next);
+    const storageKey = `livingtv_trial_start_${userId}`;
+    const localStartIso =
+      typeof window !== "undefined" ? window.localStorage.getItem(storageKey) : null;
+    const startIso = profile?.trial_started_at || localStartIso;
+    const parsedStartMs = startIso ? Date.parse(startIso) : NaN;
+    const startMs = !Number.isNaN(parsedStartMs) && parsedStartMs > 0
+      ? parsedStartMs
+      : Date.now() - Math.max(0, TRIAL_DURATION_SECONDS - trialRemainingSec) * 1000;
 
-        if (next <= 0) {
-          clearInterval(interval);
-          setTrialActive(false);
-          setStatusMsg(
-            "Free trial expired after 10 minutes of streaming! You must pay ₦30,000 to continue streaming."
-          );
-          supabase
-            .from("profiles")
-            .update({
-              trial_used: true,
-              trial_seconds_used: TRIAL_DURATION_SECONDS,
-            })
-            .eq("id", userId)
-            .then(() => {
-              setProfile((p) =>
-                p
-                  ? {
-                      ...p,
-                      trial_used: true,
-                      trial_seconds_used: TRIAL_DURATION_SECONDS,
-                    }
-                  : p
-              );
-            });
-          return 0;
-        }
+    let expiredHandled = false;
 
-        if (elapsed > 0 && elapsed % 15 === 0) {
-          supabase
-            .from("profiles")
-            .update({
-              trial_used: true,
-              trial_seconds_used: elapsed,
-            })
-            .eq("id", userId);
-        }
+    const syncTick = async () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      const remaining = Math.max(0, TRIAL_DURATION_SECONDS - elapsed);
+      setTrialRemainingSec(remaining);
 
-        return next;
-      });
+      if (remaining <= 0 && !expiredHandled) {
+        expiredHandled = true;
+        setTrialActive(false);
+        setTrialRemainingSec(0);
+        setChannel(null);
+        setStatusMsg(
+          "Free trial expired after 1 hour! Your trial channel has been automatically deleted. Pay ₦30,000 to continue streaming."
+        );
+        await supabase
+          .from("profiles")
+          .update({
+            trial_used: true,
+            trial_seconds_used: TRIAL_DURATION_SECONDS,
+          })
+          .eq("id", userId);
+        await supabase.from("channels").delete().eq("owner_id", userId);
+        setProfile((p) =>
+          p
+            ? {
+                ...p,
+                trial_used: true,
+                trial_seconds_used: TRIAL_DURATION_SECONDS,
+              }
+            : p
+        );
+        return;
+      }
+
+      if (elapsed > 0 && elapsed % 15 === 0) {
+        void supabase
+          .from("profiles")
+          .update({
+            trial_used: true,
+            trial_seconds_used: Math.min(TRIAL_DURATION_SECONDS, elapsed),
+          })
+          .eq("id", userId);
+      }
+    };
+
+    void syncTick();
+    const interval = setInterval(() => {
+      void syncTick();
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [trialActive, userId, hasVerifiedPayment, supabase]);
+  }, [trialActive, userId, hasVerifiedPayment, profile?.trial_started_at, supabase]);
 
   const handleRequestPayout = async () => {
     if (!userId || !channel?.id || adStats.syncedUsdAvailable < 100 || adStats.hasPendingPayout) {
@@ -547,12 +604,12 @@ export default function StreamerStudioPage() {
     }
     if (profile?.trial_used) {
       setStatusMsg(
-        "Your one-time 10-minute free trial has already been used. Pay ₦30,000 to activate streaming."
+        "Your one-time 1-hour free trial has already been used. Pay ₦30,000 to activate streaming."
       );
       return;
     }
     if (!channelName.trim()) {
-      setStatusMsg("Enter a channel name to start your 10-minute free trial.");
+      setStatusMsg("Enter a channel name to start your 1-hour free trial.");
       return;
     }
 
@@ -618,7 +675,7 @@ export default function StreamerStudioPage() {
         : prev
     );
     setStatusMsg(
-      "One-time 10-minute free trial started! After 10 minutes, you must pay ₦30,000."
+      "One-time 1-hour free trial started! After 1 hour, you must pay ₦30,000."
     );
     setLoading(false);
   };
@@ -729,7 +786,7 @@ export default function StreamerStudioPage() {
   const toggleComments = async () => {
     if (!channel) return;
     if (!hasVerifiedPayment && !trialActive) {
-      setStatusMsg("Your 10-minute trial has ended. Pay ₦30,000 to continue streaming.");
+      setStatusMsg("Your 1-hour trial has ended. Pay ₦30,000 to continue streaming.");
       return;
     }
 
@@ -798,8 +855,8 @@ export default function StreamerStudioPage() {
               </h2>
               <p className="text-xs text-zinc-400 mt-1">
                 {trialExpired
-                  ? "The one-time 10-minute free trial has expired. Pay ₦30,000 once to unlock unlimited streaming and ad revenue share."
-                  : "Get a one-time 10-minute free streaming trial first, or pay ₦30,000 directly for full channel activation and ad revenue share."}
+                  ? "The one-time 1-hour free trial has expired. Pay ₦30,000 once to unlock unlimited streaming and ad revenue share."
+                  : "Get a one-time 1-hour free streaming trial first, or pay ₦30,000 directly for full channel activation and ad revenue share."}
               </p>
             </div>
 
@@ -900,7 +957,7 @@ export default function StreamerStudioPage() {
                       Free Trial Time Left: {formatCountdown(trialRemainingSec)}
                     </div>
                     <div className="text-xs text-zinc-300">
-                      One-time 10-minute trial running. When it ends, you must pay ₦30,000.
+                      One-time 1-hour trial running. When it ends, you must pay ₦30,000.
                     </div>
                   </div>
                 </div>
