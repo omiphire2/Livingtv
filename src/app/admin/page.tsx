@@ -1360,6 +1360,12 @@ export default function AdminChannelsPage() {
             <p className="py-4 text-xs text-zinc-500">No ads created yet.</p>
           )}
         </div>
+
+        <SupportChatPanel
+          mode="admin"
+          userId={userId}
+          streamerOptions={[]}
+        />
       </div>
     </div>
   );
