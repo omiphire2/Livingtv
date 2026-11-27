@@ -1,3 +1,4 @@
+import Script from "next/script";
 import type { Viewport } from "next";
 
 export const viewport: Viewport = {
@@ -32,7 +33,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">{children}
+        <Script
+          id="google-adsense-init"
+          async
+          strategy="afterInteractive"
+          crossOrigin="anonymous"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1698020902052743"
+        />
+      </body>
     </html>
   );
 }
