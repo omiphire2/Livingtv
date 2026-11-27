@@ -466,7 +466,9 @@ return (
         </div>
       ))}
     </aside>
-  </main>
+  
+          {!user && <SupportChatPanel mode="viewer" userId={null} />}
+      </main>
 </div>
 );
 }

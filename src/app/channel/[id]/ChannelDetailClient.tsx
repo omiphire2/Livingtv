@@ -355,7 +355,9 @@ return (
           ))}
       </>
     )}
-  </main>
+  
+          {!userId && <SupportChatPanel mode="viewer" userId={userId} />}
+      </main>
 </div>
 );
 }

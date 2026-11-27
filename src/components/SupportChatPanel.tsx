@@ -40,28 +40,60 @@ export default function SupportChatPanel({
 }: SupportChatPanelProps) {
   const supabase = useMemo(() => createClient(), []);
 
-  const [open, setOpen] = useState(mode === "admin");
+  const [open, setOpen] = useState(mode === "streamer" ? false : true);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [viewerName, setViewerName] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Admin state: "viewer_group" or "streamer_dm"
-  const [adminTab, setAdminTab] = useState<"viewer_group" | "streamer_dm">("viewer_group");
-  const [selectedStreamerId, setSelectedStreamerId] = useState<string>(
-    streamerOptions[0]?.streamer_id || ""
-  );
+  const [adminTab, setAdminTab] = useState<"viewer_group" | "streamer_dm">("streamer_dm");
+  const [selectedStreamerId, setSelectedStreamerId] = useState<string>("");
+
+  // Merge channel-based streamer options with any streamers who sent DMs
+  const mergedStreamerOptions = useMemo(() => {
+    const map = new Map<string, StreamerThreadOption>();
+
+    for (const opt of streamerOptions) {
+      if (!opt.streamer_id) continue;
+      map.set(opt.streamer_id, {
+        streamer_id: opt.streamer_id,
+        channel_name: opt.channel_name || "Streamer Channel",
+        email: opt.email || null,
+      });
+    }
+
+    for (const msg of messages) {
+      if (msg.chat_type === "streamer_dm" && msg.streamer_id) {
+        const existing = map.get(msg.streamer_id);
+        const derivedName =
+          msg.channel_name?.trim() ||
+          existing?.channel_name ||
+          (msg.sender_role === "streamer" ? msg.sender_name : "Streamer Channel");
+        map.set(msg.streamer_id, {
+          streamer_id: msg.streamer_id,
+          channel_name: derivedName,
+          email: existing?.email || null,
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [streamerOptions, messages]);
 
   useEffect(() => {
-    if (mode === "admin" && !selectedStreamerId && streamerOptions.length > 0) {
-      setSelectedStreamerId(streamerOptions[0].streamer_id);
+    if (mode === "admin" && mergedStreamerOptions.length > 0) {
+      const exists = mergedStreamerOptions.some(
+        (s) => s.streamer_id === selectedStreamerId
+      );
+      if (!exists) {
+        setSelectedStreamerId(mergedStreamerOptions[0].streamer_id);
+      }
     }
-  }, [mode, selectedStreamerId, streamerOptions]);
+  }, [mode, mergedStreamerOptions, selectedStreamerId]);
 
   const loadMessages = useCallback(async () => {
     if (mode === "viewer") {
-      // Only non-signed-in viewers can use the viewer group chat
       if (userId) return;
       const { data } = await supabase
         .from("support_messages")
@@ -91,7 +123,7 @@ export default function SupportChatPanel({
         .from("support_messages")
         .select("*")
         .order("created_at", { ascending: true })
-        .limit(250);
+        .limit(300);
       if (data) setMessages(data as SupportMessage[]);
     }
   }, [mode, userId, supabase]);
@@ -132,7 +164,7 @@ export default function SupportChatPanel({
 
     const poll = window.setInterval(() => {
       void loadMessages();
-    }, 5000);
+    }, 4000);
 
     return () => {
       window.clearInterval(poll);
@@ -140,17 +172,11 @@ export default function SupportChatPanel({
     };
   }, [mode, userId, loadMessages, supabase]);
 
-  // Block signed-in users from using the unauthenticated viewer group chat
-  if (mode === "viewer" && userId) {
-    return null;
-  }
+  // Only non-signed-in viewers can use the viewer Contact Us chat
+  if (mode === "viewer" && userId) return null;
+  if (mode === "streamer" && !userId) return null;
 
-  // Require signed-in user for streamer mode
-  if (mode === "streamer" && !userId) {
-    return null;
-  }
-
-  const activeStreamerOption = streamerOptions.find(
+  const activeStreamerOption = mergedStreamerOptions.find(
     (s) => s.streamer_id === selectedStreamerId
   );
 
@@ -173,8 +199,7 @@ export default function SupportChatPanel({
     try {
       if (mode === "viewer") {
         if (userId) {
-          setErrorMsg("Signed-in streamers cannot post in the viewer group chat.");
-          setSending(false);
+          setErrorMsg("Signed-in streamers cannot post in the viewer Contact Us chat.");
           return;
         }
         const display = viewerName.trim() || "Viewer";
@@ -186,9 +211,8 @@ export default function SupportChatPanel({
           sender_name: display,
           body: trimmed,
         });
-        if (error) {
-          setErrorMsg(error.message);
-        } else {
+        if (error) setErrorMsg(error.message);
+        else {
           setText("");
           await loadMessages();
         }
@@ -203,9 +227,8 @@ export default function SupportChatPanel({
           sender_name: label,
           body: trimmed,
         });
-        if (error) {
-          setErrorMsg(error.message);
-        } else {
+        if (error) setErrorMsg(error.message);
+        else {
           setText("");
           await loadMessages();
         }
@@ -227,7 +250,6 @@ export default function SupportChatPanel({
         } else {
           if (!selectedStreamerId) {
             setErrorMsg("Select a streamer channel first.");
-            setSending(false);
             return;
           }
           const chName = activeStreamerOption?.channel_name || "Streamer Channel";
@@ -251,131 +273,57 @@ export default function SupportChatPanel({
     }
   };
 
-  const renderChatBody = () => (
-    <div className="space-y-3">
-      {mode === "admin" && (
-        <div className="space-y-2.5">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setAdminTab("viewer_group")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border ${
-                adminTab === "viewer_group"
-                  ? "bg-amber-500 text-black border-amber-400"
-                  : "bg-zinc-950 text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+  const renderMessageList = () => (
+    <div className="h-56 overflow-y-auto rounded-xl bg-zinc-950 border border-zinc-800 p-3 space-y-2">
+      {visibleMessages.length === 0 ? (
+        <div className="h-full flex items-center justify-center text-xs text-zinc-500 text-center px-2">
+          No messages yet. Send a message below to start the conversation.
+        </div>
+      ) : (
+        visibleMessages.map((m) => {
+          const isAdminMsg = m.sender_role === "admin";
+          return (
+            <div
+              key={m.id}
+              className={`rounded-lg px-3 py-2 text-xs border ${
+                isAdminMsg
+                  ? "bg-amber-500/15 border-amber-400/40 text-amber-100"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-100"
               }`}
             >
-              <Users className="w-3.5 h-3.5" /> Viewer Group Chat
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdminTab("streamer_dm")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border ${
-                adminTab === "streamer_dm"
-                  ? "bg-emerald-500 text-black border-emerald-400"
-                  : "bg-zinc-950 text-zinc-300 border-zinc-700 hover:bg-zinc-800"
-              }`}
-            >
-              <Tv className="w-3.5 h-3.5" /> Streamer Private Chats
-            </button>
-          </div>
-
-          {adminTab === "streamer_dm" && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <label className="text-xs text-zinc-400 shrink-0">
-                Select Streamer Channel:
-              </label>
-              <select
-                value={selectedStreamerId}
-                onChange={(e) => setSelectedStreamerId(e.target.value)}
-                className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white"
-              >
-                {streamerOptions.length === 0 && (
-                  <option value="">No streamers found</option>
-                )}
-                {streamerOptions.map((opt) => (
-                  <option key={opt.streamer_id} value={opt.streamer_id}>
-                    {opt.channel_name}
-                    {opt.email ? ` (${opt.email})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      )}
-
-      {mode === "viewer" && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-zinc-400 bg-zinc-950/80 border border-zinc-800 rounded-lg px-3 py-2">
-          <span>General Viewer Group Chat — visible to all viewers &amp; Admin</span>
-          <input
-            type="text"
-            value={viewerName}
-            onChange={(e) => setViewerName(e.target.value)}
-            placeholder="Your name (optional)"
-            maxLength={32}
-            className="bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-white sm:w-44"
-          />
-        </div>
-      )}
-
-      {mode === "streamer" && (
-        <div className="text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-800/50 rounded-lg px-3 py-2">
-          Private 1-on-1 chat with Admin for{" "}
-          <span className="font-semibold">
-            {streamerChannelName || "your channel"}
-          </span>
-          . Other streamers cannot see this chat.
-        </div>
-      )}
-
-      <div className="h-64 overflow-y-auto rounded-xl bg-zinc-950 border border-zinc-800 p-3 space-y-2">
-        {visibleMessages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-zinc-500">
-            No messages yet. Start the conversation below.
-          </div>
-        ) : (
-          visibleMessages.map((m) => {
-            const isAdminMsg = m.sender_role === "admin";
-            return (
-              <div
-                key={m.id}
-                className={`rounded-lg px-3 py-2 text-xs border ${
-                  isAdminMsg
-                    ? "bg-amber-500/10 border-amber-500/30 text-amber-100"
-                    : "bg-zinc-900 border-zinc-800 text-zinc-100"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="font-semibold inline-flex items-center gap-1">
-                    {isAdminMsg && (
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    )}
-                    {m.sender_name}
-                    {m.chat_type === "streamer_dm" && m.channel_name && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-emerald-300">
-                        {m.channel_name}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[10px] text-zinc-500">
-                    {new Date(m.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-                <p className="whitespace-pre-wrap break-words text-zinc-200">
-                  {m.body}
-                </p>
+              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                <span className="font-semibold inline-flex items-center gap-1.5">
+                  {isAdminMsg ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500 text-black text-[10px] font-bold uppercase">
+                      <ShieldCheck className="w-3 h-3" /> Admin
+                    </span>
+                  ) : (
+                    <span>{m.sender_name}</span>
+                  )}
+                  {m.chat_type === "streamer_dm" && m.channel_name && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                      {m.channel_name}
+                    </span>
+                  )}
+                </span>
+                <span className="text-[10px] text-zinc-500">
+                  {new Date(m.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
               </div>
-            );
-          })
-        )}
-      </div>
+              <p className="whitespace-pre-wrap break-words text-zinc-200">{m.body}</p>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
 
+  const renderComposer = () => (
+    <>
       {errorMsg && <p className="text-xs text-red-400">{errorMsg}</p>}
-
       <form onSubmit={handleSend} className="flex items-center gap-2">
         <input
           type="text"
@@ -383,8 +331,10 @@ export default function SupportChatPanel({
           onChange={(e) => setText(e.target.value)}
           placeholder={
             mode === "admin" && adminTab === "streamer_dm"
-              ? `Message ${activeStreamerOption?.channel_name || "streamer"}...`
-              : "Type your message..."
+              ? `Reply to ${activeStreamerOption?.channel_name || "streamer"}...`
+              : mode === "viewer"
+              ? "Write a message to Admin (visible to all viewers)..."
+              : "Text the Admin..."
           }
           className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white"
         />
@@ -397,28 +347,107 @@ export default function SupportChatPanel({
           {sending ? "Sending..." : "Send"}
         </button>
       </form>
-    </div>
+    </>
   );
 
+  // Non-signed-in viewer section styled like a comment/chat section on the page
+  if (mode === "viewer") {
+    return (
+      <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-white inline-flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-emerald-400" />
+              {buttonLabel} — Viewer Chat
+            </h2>
+            <p className="text-[11px] text-zinc-400">
+              Leave a message for Admin. Every viewer sees the chat and Admin replies.
+            </p>
+          </div>
+          <input
+            type="text"
+            value={viewerName}
+            onChange={(e) => setViewerName(e.target.value)}
+            placeholder="Your name (optional)"
+            maxLength={32}
+            className="bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white sm:w-44"
+          />
+        </div>
+        {renderMessageList()}
+        {renderComposer()}
+      </section>
+    );
+  }
+
+  // Admin inbox section on /admin
   if (mode === "admin") {
     return (
       <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 sm:p-6 space-y-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-base sm:text-lg font-semibold text-white inline-flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-emerald-400" />
               Contact Us Support Inbox
             </h2>
             <p className="text-xs text-zinc-400">
-              Reply to the public Viewer Group Chat or message individual Streamers by channel.
+              Text streamers privately by channel or reply in the public Viewer Group Chat.
             </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setAdminTab("streamer_dm")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border ${
+                adminTab === "streamer_dm"
+                  ? "bg-emerald-500 text-black border-emerald-400"
+                  : "bg-zinc-950 text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              }`}
+            >
+              <Tv className="w-3.5 h-3.5" /> Streamer Chats ({mergedStreamerOptions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminTab("viewer_group")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border ${
+                adminTab === "viewer_group"
+                  ? "bg-amber-500 text-black border-amber-400"
+                  : "bg-zinc-950 text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" /> Viewer Group Chat
+            </button>
+          </div>
         </div>
-        {renderChatBody()}
+
+        {adminTab === "streamer_dm" && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-xs text-zinc-400 shrink-0">
+              Channel / Streamer:
+            </label>
+            <select
+              value={selectedStreamerId}
+              onChange={(e) => setSelectedStreamerId(e.target.value)}
+              className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white"
+            >
+              {mergedStreamerOptions.length === 0 && (
+                <option value="">No streamer threads yet</option>
+              )}
+              {mergedStreamerOptions.map((opt) => (
+                <option key={opt.streamer_id} value={opt.streamer_id}>
+                  {opt.channel_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {renderMessageList()}
+        {renderComposer()}
       </section>
     );
   }
 
+  // Signed-in streamer private 1-on-1 chat with Admin
   return (
     <>
       <button
@@ -437,9 +466,7 @@ export default function SupportChatPanel({
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-emerald-400" />
                 <span className="text-sm font-bold text-white">
-                  {mode === "viewer"
-                    ? "Contact Us — Viewer Group Chat"
-                    : "Contact Us — Private Streamer Support"}
+                  Contact Us — Admin Direct Chat
                 </span>
               </div>
               <button
@@ -451,7 +478,15 @@ export default function SupportChatPanel({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            {renderChatBody()}
+            <div className="text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-800/50 rounded-lg px-3 py-2">
+              Private chat between you and Admin for{" "}
+              <span className="font-semibold">
+                {streamerChannelName || "your channel"}
+              </span>
+              .
+            </div>
+            {renderMessageList()}
+            {renderComposer()}
           </div>
         </div>
       )}
