@@ -95,7 +95,7 @@ export default function MessageScroller({
         <Megaphone className="w-3.5 h-3.5" /> Notice
       </div>
       <div className="relative flex-1 overflow-hidden py-1.5">
-        <div className="livingtv-marquee-track whitespace-nowrap text-xs font-medium text-amber-100">
+        <div className="livingtv-marquee-track whitespace-nowrap text-xs font-medium text-amber-100" style={{ animationDuration: `${Math.max(38, Math.round(resolvedMessage.length * 0.35))}s` }}>
           <span className="mx-8">{resolvedMessage}</span>
           <span className="mx-8" aria-hidden="true">{resolvedMessage}</span>
           <span className="mx-8" aria-hidden="true">{resolvedMessage}</span>

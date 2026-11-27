@@ -55,7 +55,7 @@ body {
 .livingtv-marquee-track {
   display: inline-flex;
   width: max-content;
-  animation: livingtvMarquee 18s linear infinite;
+  animation: livingtvMarquee 42s linear infinite;
 }
 
 .livingtv-marquee-track:hover {
