@@ -845,13 +845,13 @@ export default function StreamerStudioPage() {
             <div>
               <span className="text-xs uppercase font-bold text-amber-400">
                 {trialExpired
-                  ? "10-Minute Free Trial Expired — Payment Required"
-                  : "10-Minute Free Trial (Once Per Account) or ₦30,000 Activation"}
+                  ? "1-Hour Free Trial Expired — Payment Required"
+                  : "1-Hour Free Trial (Once Per Account) or ₦30,000 Activation"}
               </span>
               <h2 className="text-lg font-bold text-white mt-1">
                 {trialExpired
-                  ? "Your 10-Minute Free Trial Ended — Pay ₦30,000 to Stream"
-                  : "Add Your Channel: Start 10-Min Free Trial or Pay ₦30,000"}
+                  ? "Your 1-Hour Free Trial Ended — Pay ₦30,000 to Stream"
+                  : "Add Your Channel: Start 1-Hr Free Trial or Pay ₦30,000"}
               </h2>
               <p className="text-xs text-zinc-400 mt-1">
                 {trialExpired
@@ -910,7 +910,7 @@ export default function StreamerStudioPage() {
                   className="px-5 py-2.5 rounded-lg bg-emerald-500 text-black font-bold text-sm hover:bg-emerald-400 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   <Play className="w-4 h-4" />
-                  {loading ? "Starting Trial..." : "Start 10-Min Free Trial (Once)"}
+                  {loading ? "Starting Trial..." : "Start 1-Hr Free Trial (Once)"}
                 </button>
               </form>
             )}
@@ -997,7 +997,7 @@ export default function StreamerStudioPage() {
                 <div className="text-base font-bold text-white mt-2">
                   {hasFullAccess
                     ? "Monetized (Rev-Share Active)"
-                    : `10-Min Free Trial (${formatCountdown(trialRemainingSec)})`}
+                    : `1-Hr Free Trial (${formatCountdown(trialRemainingSec)})`}
                 </div>
               </div>
             </div>
